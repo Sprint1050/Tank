@@ -1,0 +1,698 @@
+	<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Water Tank App</title>
+
+<style>
+:root{
+  --bg:#f6f8fb;
+  --card:#ffffff;
+  --text:#0f172a;
+  --sub:#6b7280;
+  --accent:#2563eb;
+  --accent2:#1d4ed8;
+  --bar:#22c55e;
+}
+
+.status-green{ color:#16a34a; }
+.status-orange{ color:#f59e0b; }
+.status-red{ color:#dc2626; }
+
+body.dark{
+  --bg:#0b1220;
+  --card:#111827;
+  --text:#e5e7eb;
+  --sub:#9ca3af;
+  --accent:#3b82f6;
+  --accent2:#2563eb;
+  --bar:#22c55e;
+}
+
+body{
+  margin:0;
+  max-width:420px;
+  margin-left:auto;
+  margin-right:auto;
+  font-family:-apple-system;
+  background:var(--bg);
+  padding-bottom:80px;   /* ⭐ ADD THIS */
+}
+
+h1{
+  text-align:center;
+  font-weight:700;
+  margin:10px 0 20px 0;
+}
+
+.card{
+  backdrop-filter: blur(6px);
+  background:var(--card);
+  padding:18px;
+  border-radius:18px;
+  margin-bottom:16px;
+  box-shadow:0 15px 35px rgba(0,0,0,0.08);
+}
+
+.label{
+  font-size:14px;
+  color:var(--sub);
+  margin-bottom:6px;
+}
+
+#statusText{
+  white-space: pre-line;
+  transition: all 0.35s ease;
+}
+
+#rainResult{
+  white-space: pre-line;
+}
+
+.status-animate{
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.big-input{
+  width:100%;
+  font-size:34px;
+  padding:12px;
+  text-align:center;
+  border-radius:14px;
+  border:1px solid #e5e7eb;
+}
+
+body.dark .big-input{
+  background:#0b1220;
+  border:1px solid #1f2937;
+  color:white;
+}
+
+button{
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  box-shadow: 0 10px 20px rgba(37,99,235,0.25);
+  width:100%;
+  padding:14px;
+  font-size:16px;
+  border:none;
+  border-radius:14px;
+  background:linear-gradient(45deg,var(--accent),var(--accent2));
+  color:white;
+  margin-top:12px;
+  font-weight:600;
+}
+
+.progress{
+  height:28px;
+  background:#e5e7eb;
+  border-radius:20px;
+  margin-top:14px;
+  position:relative;
+  overflow:hidden;
+}
+
+body.dark .progress{
+  background:#1f2937;
+}
+
+.bar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#34d399,var(--bar));
+  transition: width 0.6s cubic-bezier(.4,0,.2,1);
+}
+
+.progress span{
+  position:absolute;
+  width:100%;
+  text-align:center;
+  line-height:28px;
+  font-weight:700;
+  font-size:14px;
+}
+
+.nav{
+  height:60px;
+  box-shadow:0 -5px 20px rgba(0,0,0,0.08);
+  position:fixed;
+  bottom:0;
+  left:0;
+  width:100%;
+  display:flex;
+  border-top:1px solid #e5e7eb;
+  background:var(--card);
+}
+
+body.dark .nav{
+  border-top:1px solid #1f2937;
+}
+
+.nav button{
+  flex:1;
+  background:var(--card);
+  color:var(--text);
+  font-weight:600;
+}
+.nav button.active{
+  color: var(--accent);
+  font-weight:700;
+  transform: translateY(-2px);
+}
+button:active{
+  transform: scale(0.97);
+  box-shadow: 0 5px 10px rgba(37,99,235,0.2);
+}
+
+.toggle{
+  text-align:center;
+  font-size:13px;
+  color:var(--sub);
+  margin-top:8px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>Water Tank</h1>
+
+<!-- HOME -->
+<div id="home" class="screen">
+<div class="card" id="statusCard">
+  <div class="label">System Status</div>
+  <h2 id="statusText">Waiting for data</h2>
+</div>
+
+  <div class="card">
+    <div class="label">Today's Water Level (mm)</div>
+    <input id="waterLevel" class="big-input" type="number" placeholder="Enter level">
+
+    <div class="progress">
+      <div class="bar" id="bar"></div>
+      <span id="percent">0%</span>
+    </div>
+
+    <button onclick="saveReading()">Save Reading</button>
+  </div>
+
+  <div class="card">
+    <div class="label">Litres Remaining</div>
+<h2 id="litres" style="font-size:38px;margin:6px 0;">0 L</h2>
+<div id="capacityInfo" class="label"></div>
+<div id="dailyUsage" class="label"></div>
+
+<div id="lowWarning"></div>
+
+  </div>
+
+  <div class="card">
+    <button onclick="openSettings()">Tank Settings</button>
+  </div>
+</div>
+
+
+<!-- INTEL -->
+<div id="intel" class="screen" style="display:none">
+  <div class="card" id="intelOutput"></div>
+<button onclick="resetHistory()" style="background:#ef4444;">
+  Reset History
+</button>
+</div>
+
+
+<!-- RAIN -->
+<div id="rain" class="screen" style="display:none">
+  <div class="card">
+    <div>Rainfall (mm)</div>
+    <input id="rainMm" class="big-input" type="number">
+    <div id="rainResult" class="label" style="margin-top:10px;"></div>
+    <button onclick="saveRain()">Save Rain</button>
+  </div>
+
+  <div class="card">
+    <div class="label">Manual Refill (litres)</div>
+    <input id="refillLitres" class="big-input" type="number" placeholder="0">
+    <button onclick="addRefill()">Add Refill</button>
+  </div>
+</div>   <!-- ⭐ NOW rain is closed -->
+
+<!-- GRAPH -->
+<div id="graph" class="screen" style="display:none">
+  <div class="card">
+    <canvas id="chart" height="200"></canvas>
+  </div>
+</div>
+
+
+<!-- NAV -->
+<div class="nav">
+  <button id="tab-home" onclick="showScreen('home')">Home</button>
+  <button id="tab-intel" onclick="showScreen('intel')">Intel</button>
+  <button id="tab-rain" onclick="showScreen('rain')">Rain</button>
+  <button id="tab-graph" onclick="showScreen('graph')">Graph</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+<script>
+window.onload = () => {
+  const input = document.getElementById("waterLevel");
+  if(input) input.focus();
+document.getElementById("tab-home").classList.add("active");
+};
+
+// SETTINGS
+let tankWidth = parseFloat(localStorage.getItem("tankWidth")) || 5000;
+let tankHeight = parseFloat(localStorage.getItem("tankHeight")) || 2000;
+let numberOfTanks = parseFloat(localStorage.getItem("numberOfTanks")) || 1;
+
+
+// CALCULATE
+function calculate(){
+  const level = parseFloat(document.getElementById("waterLevel").value) || 0;
+  if(!tankHeight) return;
+
+const widthCm = tankWidth / 10;
+const heightCm = tankHeight / 10;
+const levelCm = level / 10;
+const radius = widthCm / 2;
+
+if(levelCm > heightCm) return;
+
+const litres = Math.PI * radius * radius * levelCm * numberOfTanks / 1000;
+const capacityLitres = Math.PI * radius * radius * heightCm * numberOfTanks / 1000;
+
+const percent = (litres / capacityLitres) * 100;
+
+const spaceLeft = capacityLitres - litres;
+
+document.getElementById("capacityInfo").innerText =
+  `${Math.round(litres).toLocaleString()} L of ${Math.round(capacityLitres).toLocaleString()} L (${percent.toFixed(1)}%)\nSpace available: ${Math.round(spaceLeft).toLocaleString()} L`;
+
+
+  animateValue("litres", 0, litres);
+
+  document.getElementById("bar").style.width = percent + "%";
+  document.getElementById("percent").innerText = percent.toFixed(1) + "%";
+
+  // LOW WARNING
+  if(percent < 20){
+    document.getElementById("lowWarning").innerHTML =
+      `<div class="warning">⚠ Low water level</div>`;
+  } else {
+    document.getElementById("lowWarning").innerHTML = "";
+  }
+
+  updateDailyUsage();
+  updateStatus();
+}
+
+document.getElementById("waterLevel").addEventListener("input", calculate);
+document.getElementById("rainMm")?.addEventListener("input", calculateRain);
+
+
+// SAVE READING
+function animateValue(id, start, end, duration=400){
+  let range = end - start;
+  let startTime = null;
+
+  function step(timestamp){
+    if(!startTime) startTime = timestamp;
+    const progress = timestamp - startTime;
+    const value = Math.min(start + range * (progress/duration), end);
+    document.getElementById(id).innerText =
+      Math.floor(value).toLocaleString() + " L";
+    if(progress < duration) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+function updateDailyUsage(){
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+  const el = document.getElementById("dailyUsage");
+
+  if(history.length < 3){
+    el.innerText = "";
+    return;
+  }
+
+  let totalDrop = 0;
+  let days = 0;
+
+  for(let i = 1; i < history.length; i++){
+    let diff = history[i-1].level - history[i].level;
+    if(diff > 0){
+      totalDrop += diff;
+      days++;
+    }
+  }
+
+  if(days === 0){
+    el.innerText = "";
+    return;
+  }
+
+  const avgDropMm = totalDrop / days;
+
+  const widthCm = tankWidth / 10;
+  const radius = widthCm / 2;
+
+  const litresPerDay =
+    Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
+
+  el.innerText = `Using ~${Math.round(litresPerDay).toLocaleString()} L per day`;
+}
+
+function saveReading(){
+  const level = document.getElementById("waterLevel").value;
+  if(!level) return alert("Enter a level");
+
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+  history.push({date:new Date().toISOString(), level:parseFloat(level)});
+  localStorage.setItem("history", JSON.stringify(history));
+
+  calculate();
+  alert("Saved 👍");
+}
+function updateStatus(){
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+
+  const el = document.getElementById("statusText");el.classList.add("status-animate");
+  el.className = "";
+
+  if(history.length < 3){
+    el.innerText = "Add a few daily readings to unlock predictions";
+    return;
+  }
+
+  let totalDrop = 0;
+  let days = 0;
+
+  for(let i = 1; i < history.length; i++){
+    let diff = history[i-1].level - history[i].level;
+    if(diff > 0){
+      totalDrop += diff;
+      days++;
+    }
+  }
+
+  if(days === 0){
+    el.innerText = "Usage unclear";
+    return;
+  }
+
+  const avgDropMm = totalDrop / days;
+
+  const widthCm = tankWidth / 10;
+  const radius = widthCm / 2;
+  const litresPerDay = Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
+
+  const currentLevel = history[history.length - 1].level;
+  const currentCm = currentLevel / 10;
+  const currentLitres = Math.PI * radius * radius * currentCm * numberOfTanks / 1000;
+
+  const daysLeft = currentLitres / litresPerDay;
+
+  const emptyDate = new Date();
+  emptyDate.setDate(emptyDate.getDate() + daysLeft);
+
+  const dateString = emptyDate.toLocaleDateString(undefined,{
+    month: "long",
+    day: "numeric"
+  });
+
+  if(daysLeft > 20){
+    el.innerText = `🟢 Plenty of water\nEmpty around ${dateString}`;
+    el.classList.add("status-green");
+  }
+  else if(daysLeft > 7){
+    el.innerText = `🟠 Watch usage\nEmpty around ${dateString}`;
+    el.classList.add("status-orange");
+  }
+  else{
+    el.innerText = `🔴 Action needed\nEmpty around ${dateString}`;
+    el.classList.add("status-red");
+  }
+}
+
+// SETTINGS
+function openSettings(){
+const roof = prompt("Roof catchment area (m²)", localStorage.getItem("roofArea") || 200);
+if(roof) localStorage.setItem("roofArea", parseFloat(roof));
+
+  const w = prompt("Tank width (mm)", tankWidth);
+  const h = prompt("Tank height (mm)", tankHeight);
+  const n = prompt("Number of tanks", numberOfTanks);
+
+  if(w) tankWidth = parseFloat(w);
+  if(h) tankHeight = parseFloat(h);
+  if(n) numberOfTanks = parseFloat(n);
+
+  localStorage.setItem("tankWidth", tankWidth);
+  localStorage.setItem("tankHeight", tankHeight);
+  localStorage.setItem("numberOfTanks", numberOfTanks);
+
+  alert("Settings saved");
+
+}
+
+function resetHistory(){
+  if(!confirm("Clear all readings and rain data?")) return;
+
+  localStorage.removeItem("history");
+  localStorage.removeItem("rain");
+
+  alert("History cleared");
+  location.reload();
+}
+
+
+// NAVIGATION
+function showScreen(name){
+  document.querySelectorAll(".screen").forEach(s=>s.style.display="none");
+  document.getElementById(name).style.display="block";
+
+  // ⭐ ADD THIS
+  document.querySelectorAll(".nav button")
+    .forEach(b => b.classList.remove("active"));
+
+  const activeTab = document.getElementById("tab-" + name);
+  if(activeTab) activeTab.classList.add("active");
+  // ⭐ END
+
+  if(name === "intel") loadIntel();
+  if(name === "graph") loadGraph();
+}
+
+// INTELLIGENCE + PREDICTION
+function loadIntel(){
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+
+  if(history.length < 3){
+    document.getElementById("intelOutput").innerHTML =
+      "Need more readings for prediction.";
+    return;
+  }
+
+  let totalDrop = 0;
+  let days = 0;
+
+  for(let i = 1; i < history.length; i++){
+    let diff = history[i-1].level - history[i].level;
+    if(diff > 0){
+      totalDrop += diff;
+      days++;
+    }
+  }
+
+  if(days === 0){
+    document.getElementById("intelOutput").innerHTML = "Usage unclear.";
+    return;
+  }
+const avgDropMm = totalDrop / days;
+
+const widthCm = tankWidth / 10;
+const radius = widthCm / 2;
+
+const litresPerDay =
+  (Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks) / 1000;
+
+const currentLevel = history[history.length - 1].level;
+const currentCm = currentLevel / 10;
+
+const currentLitres =
+  (Math.PI * radius * radius * currentCm * numberOfTanks) / 1000;
+
+const daysLeft = currentLitres / litresPerDay;
+
+const emptyDate = new Date();
+emptyDate.setDate(emptyDate.getDate() + daysLeft);
+
+const dateString = emptyDate.toLocaleDateString(undefined,{
+  month: "long",
+  day: "numeric"
+});
+
+document.getElementById("intelOutput").innerHTML = `
+  <div>Average drop: <b>${avgDropMm.toFixed(1)} mm/day</b></div>
+  <div>Usage: <b>${Math.round(litresPerDay).toLocaleString()} L/day</b></div>
+  <div>Days remaining: <b>${Math.round(daysLeft)}</b></div>
+  <div>Estimated empty: <b>${dateString}</b></div>
+`;
+
+}
+
+// RAIN
+function calculateRain(){
+  const rain = parseFloat(document.getElementById("rainMm").value) || 0;
+  const roofArea = parseFloat(localStorage.getItem("roofArea")) || 0;
+
+  if(!roofArea){
+    document.getElementById("rainResult").innerText = "Add roof area in settings";
+    return;
+  }
+
+  const litresAdded = rain * roofArea;
+
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+  if(history.length === 0){
+    document.getElementById("rainResult").innerText = "";
+    return;
+  }
+
+  const widthCm = tankWidth / 10;
+  const radius = widthCm / 2;
+
+  const heightCmTotal = tankHeight / 10;
+  const capacityLitres = Math.PI * radius * radius * heightCmTotal * numberOfTanks / 1000
+;
+
+  const currentLevel = history[history.length - 1].level;
+  const currentCm = currentLevel / 10;
+  const currentLitres = Math.PI * radius * radius * currentCm * numberOfTanks / 1000
+;
+
+  const newLitres = Math.min(capacityLitres, currentLitres + litresAdded);
+  const overflow = (currentLitres + litresAdded) - capacityLitres;
+  const newPercent = (newLitres / capacityLitres) * 100;
+
+   let message =
+  `Rain could add ${Math.round(litresAdded).toLocaleString()} L\n` +
+  `Tank would reach ${newPercent.toFixed(1)}%`;
+
+if(overflow > 0){
+  message += `\n⚠ Overflow risk: ${Math.round(overflow).toLocaleString()} L`;
+}
+
+// estimate daily usage from history
+let totalDrop = 0;
+let days = 0;
+
+for(let i = 1; i < history.length; i++){
+  let diff = history[i-1].level - history[i].level;
+  if(diff > 0){
+    totalDrop += diff;
+    days++;
+  }
+}
+
+if(days > 0){
+  const avgDropMm = totalDrop / days;
+  const litresPerDay =
+    Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
+
+  if(litresPerDay > 0){
+    const daysGained = litresAdded / litresPerDay;
+    message += `\n💧 About ${daysGained.toFixed(1)} extra days of water`;
+  }
+}
+
+else{
+  message += `\n✅ No overflow expected`;
+}
+
+document.getElementById("rainResult").innerText = message;
+
+}
+function addRefill(){
+  const refill = parseFloat(document.getElementById("refillLitres").value);
+  if(!refill) return;
+
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+  if(history.length === 0) return;
+
+  const widthCm = tankWidth / 10;
+  const radius = widthCm / 2;
+  const heightCmTotal = tankHeight / 10;
+  const capacityLitres = Math.PI * radius * radius * heightCmTotal * numberOfTanks / 1000;
+
+  const currentLevel = history[history.length - 1].level;
+  const currentCm = currentLevel / 10;
+  const currentLitres = Math.PI * radius * radius * currentCm * numberOfTanks / 1000;
+
+  const newLitres = Math.min(capacityLitres, currentLitres + refill);
+
+  // convert litres back to mm
+  const newCm = newLitres / (Math.PI * radius * radius * numberOfTanks);
+  const newMm = newCm * 10;
+
+  history.push({
+    date: new Date().toISOString(),
+    level: newMm
+  });
+
+  localStorage.setItem("history", JSON.stringify(history));
+
+  alert("Refill added 👍");
+
+  calculate();      // refresh numbers
+  updateStatus();   // refresh prediction
+}
+function saveRain(){
+  const rain = document.getElementById("rainMm").value;
+  if(!rain) return;
+
+  let rainData = JSON.parse(localStorage.getItem("rain")) || [];
+  rainData.push({date:new Date().toISOString(), rain:parseFloat(rain)});
+  localStorage.setItem("rain", JSON.stringify(rainData));
+
+  alert("Saved 👍");
+}
+
+// GRAPH
+let chartInstance;
+function loadGraph(){
+  let history = JSON.parse(localStorage.getItem("history")) || [];
+  if(history.length === 0) return;
+
+  const labels = history.map(h=>new Date(h.date).toLocaleDateString());
+  const data = history.map(h=>h.level);
+
+  if(chartInstance) chartInstance.destroy();
+
+  const ctx = document.getElementById("chart");
+
+  chartInstance = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[{
+        label:'Water Level (mm)',
+        data:data,
+        fill:false,
+        tension:0.2
+      }]
+    }
+  });
+}
+
+</script>
+
+</body>
+</html>
