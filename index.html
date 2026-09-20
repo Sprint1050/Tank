@@ -174,6 +174,38 @@ button:active{
   color:var(--sub);
   margin-top:8px;
 }
+
+.usage-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.usage-grid label{
+  font-size:13px;
+  color:var(--sub);
+}
+.usage-grid input{
+  box-sizing:border-box;
+  width:100%;
+  margin-top:5px;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid #e5e7eb;
+  font-size:16px;
+  background:var(--card);
+  color:var(--text);
+}
+body.dark .usage-grid input{
+  background:#0b1220;
+  border:1px solid #1f2937;
+  color:white;
+}
+.usage-total{
+  margin-top:12px;
+  font-weight:700;
+  font-size:16px;
+}
+
 </style>
 
 </head>
@@ -209,6 +241,22 @@ button:active{
 
 <div id="lowWarning"></div>
 
+  </div>
+
+
+  <div class="card">
+    <div class="label">Daily Water Usage (L/day)</div>
+    <div class="usage-grid">
+      <label>Showers<input id="usageShowers" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Toilets<input id="usageToilets" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Laundry<input id="usageLaundry" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Kitchen<input id="usageKitchen" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Garden<input id="usageGarden" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Cleaning<input id="usageCleaning" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Other<input id="usageOther" type="number" min="0" step="1" placeholder="0"></label>
+    </div>
+    <div id="usageTotal" class="usage-total">Total Daily Usage: 0 L/day</div>
+    <button onclick="saveDailyUsage()">Save Daily Usage</button>
   </div>
 
   <div class="card">
@@ -265,8 +313,59 @@ button:active{
 window.onload = () => {
   const input = document.getElementById("waterLevel");
   if(input) input.focus();
-document.getElementById("tab-home").classList.add("active");
+  document.getElementById("tab-home").classList.add("active");
+  loadDailyUsage();
+  calculate();
 };
+
+
+// DAILY USAGE
+const usageFields = [
+  "Showers","Toilets","Laundry","Kitchen","Garden","Cleaning","Other"
+];
+
+function getDailyUsageValues(){
+  return usageFields.map(name =>
+    parseFloat(document.getElementById("usage" + name).value) || 0
+  );
+}
+
+function getManualDailyUsage(){
+  const values = getDailyUsageValues();
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total > 0 ? total : 0;
+}
+
+function updateDailyUsageTotal(){
+  const total = getManualDailyUsage();
+  const el = document.getElementById("usageTotal");
+  if(el) el.innerText = `Total Daily Usage: ${Math.round(total).toLocaleString()} L/day`;
+}
+
+function loadDailyUsage(){
+  const saved = JSON.parse(localStorage.getItem("dailyUsage")) || {};
+  usageFields.forEach(name => {
+    const input = document.getElementById("usage" + name);
+    if(input) input.value = saved[name] ?? "";
+  });
+  updateDailyUsageTotal();
+}
+
+function saveDailyUsage(){
+  const data = {};
+  usageFields.forEach(name => {
+    data[name] = parseFloat(document.getElementById("usage" + name).value) || 0;
+  });
+  localStorage.setItem("dailyUsage", JSON.stringify(data));
+  updateDailyUsageTotal();
+  updateDailyUsage();
+  updateStatus();
+  alert("Daily usage saved 👍");
+}
+
+usageFields.forEach(name => {
+  document.getElementById("usage" + name)?.addEventListener("input", updateDailyUsageTotal);
+});
 
 // SETTINGS
 let tankWidth = parseFloat(localStorage.getItem("tankWidth")) || 5000;
@@ -334,8 +433,15 @@ function animateValue(id, start, end, duration=400){
   requestAnimationFrame(step);
 }
 function updateDailyUsage(){
-  let history = JSON.parse(localStorage.getItem("history")) || [];
   const el = document.getElementById("dailyUsage");
+  const manualUsage = getManualDailyUsage();
+
+  if(manualUsage > 0){
+    el.innerText = `Using ${Math.round(manualUsage).toLocaleString()} L per day (manual)`;
+    return;
+  }
+
+  let history = JSON.parse(localStorage.getItem("history")) || [];
 
   if(history.length < 3){
     el.innerText = "";
@@ -359,14 +465,13 @@ function updateDailyUsage(){
   }
 
   const avgDropMm = totalDrop / days;
-
   const widthCm = tankWidth / 10;
   const radius = widthCm / 2;
 
   const litresPerDay =
     Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
 
-  el.innerText = `Using ~${Math.round(litresPerDay).toLocaleString()} L per day`;
+  el.innerText = `Using ~${Math.round(litresPerDay).toLocaleString()} L per day (from readings)`;
 }
 
 function saveReading(){
@@ -382,9 +487,48 @@ function saveReading(){
 }
 function updateStatus(){
   let history = JSON.parse(localStorage.getItem("history")) || [];
-
-  const el = document.getElementById("statusText");el.classList.add("status-animate");
+  const el = document.getElementById("statusText");
+  el.classList.add("status-animate");
   el.className = "";
+
+  const manualUsage = getManualDailyUsage();
+
+  if(manualUsage > 0){
+    const level = parseFloat(document.getElementById("waterLevel").value) || 0;
+    const widthCm = tankWidth / 10;
+    const radius = widthCm / 2;
+    const currentCm = level / 10;
+    const currentLitres =
+      Math.PI * radius * radius * currentCm * numberOfTanks / 1000;
+
+    if(currentLitres <= 0){
+      el.innerText = "Enter today's water level";
+      return;
+    }
+
+    const daysLeft = currentLitres / manualUsage;
+    const emptyDate = new Date();
+    emptyDate.setDate(emptyDate.getDate() + daysLeft);
+
+    const dateString = emptyDate.toLocaleDateString(undefined,{
+      month: "long",
+      day: "numeric"
+    });
+
+    if(daysLeft > 20){
+      el.innerText = `🟢 Plenty of water\nEmpty around ${dateString}`;
+      el.classList.add("status-green");
+    }
+    else if(daysLeft > 7){
+      el.innerText = `🟠 Watch usage\nEmpty around ${dateString}`;
+      el.classList.add("status-orange");
+    }
+    else{
+      el.innerText = `🔴 Action needed\nEmpty around ${dateString}`;
+      el.classList.add("status-red");
+    }
+    return;
+  }
 
   if(history.length < 3){
     el.innerText = "Add a few daily readings to unlock predictions";
@@ -408,15 +552,14 @@ function updateStatus(){
   }
 
   const avgDropMm = totalDrop / days;
-
   const widthCm = tankWidth / 10;
   const radius = widthCm / 2;
-  const litresPerDay = Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
+  const litresPerDay =
+    Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
 
   const currentLevel = history[history.length - 1].level;
   const currentCm = currentLevel / 10;
   const currentLitres = Math.PI * radius * radius * currentCm * numberOfTanks / 1000;
-
   const daysLeft = currentLitres / litresPerDay;
 
   const emptyDate = new Date();
@@ -467,6 +610,7 @@ function resetHistory(){
 
   localStorage.removeItem("history");
   localStorage.removeItem("rain");
+  localStorage.removeItem("dailyUsage");
 
   alert("History cleared");
   location.reload();
@@ -493,10 +637,45 @@ function showScreen(name){
 // INTELLIGENCE + PREDICTION
 function loadIntel(){
   let history = JSON.parse(localStorage.getItem("history")) || [];
+  const manualUsage = getManualDailyUsage();
+
+  if(manualUsage > 0){
+    const level = parseFloat(document.getElementById("waterLevel").value) ||
+      (history.length ? history[history.length - 1].level : 0);
+
+    const widthCm = tankWidth / 10;
+    const radius = widthCm / 2;
+    const currentCm = level / 10;
+    const currentLitres =
+      (Math.PI * radius * radius * currentCm * numberOfTanks) / 1000;
+
+    if(currentLitres <= 0){
+      document.getElementById("intelOutput").innerHTML =
+        "Enter today's water level to calculate remaining days.";
+      return;
+    }
+
+    const daysLeft = currentLitres / manualUsage;
+    const emptyDate = new Date();
+    emptyDate.setDate(emptyDate.getDate() + daysLeft);
+
+    const dateString = emptyDate.toLocaleDateString(undefined,{
+      month: "long",
+      day: "numeric"
+    });
+
+    document.getElementById("intelOutput").innerHTML = `
+      <div>Daily usage: <b>${Math.round(manualUsage).toLocaleString()} L/day</b></div>
+      <div>Days remaining: <b>${Math.round(daysLeft)}</b></div>
+      <div>Estimated empty: <b>${dateString}</b></div>
+      <div style="margin-top:10px;color:var(--sub);">Based on your saved daily usage settings.</div>
+    `;
+    return;
+  }
 
   if(history.length < 3){
     document.getElementById("intelOutput").innerHTML =
-      "Need more readings for prediction.";
+      "Need more readings for prediction, or enter your daily usage above.";
     return;
   }
 
@@ -515,37 +694,36 @@ function loadIntel(){
     document.getElementById("intelOutput").innerHTML = "Usage unclear.";
     return;
   }
-const avgDropMm = totalDrop / days;
 
-const widthCm = tankWidth / 10;
-const radius = widthCm / 2;
+  const avgDropMm = totalDrop / days;
+  const widthCm = tankWidth / 10;
+  const radius = widthCm / 2;
 
-const litresPerDay =
-  (Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks) / 1000;
+  const litresPerDay =
+    (Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks) / 1000;
 
-const currentLevel = history[history.length - 1].level;
-const currentCm = currentLevel / 10;
+  const currentLevel = history[history.length - 1].level;
+  const currentCm = currentLevel / 10;
 
-const currentLitres =
-  (Math.PI * radius * radius * currentCm * numberOfTanks) / 1000;
+  const currentLitres =
+    (Math.PI * radius * radius * currentCm * numberOfTanks) / 1000;
 
-const daysLeft = currentLitres / litresPerDay;
+  const daysLeft = currentLitres / litresPerDay;
 
-const emptyDate = new Date();
-emptyDate.setDate(emptyDate.getDate() + daysLeft);
+  const emptyDate = new Date();
+  emptyDate.setDate(emptyDate.getDate() + daysLeft);
 
-const dateString = emptyDate.toLocaleDateString(undefined,{
-  month: "long",
-  day: "numeric"
-});
+  const dateString = emptyDate.toLocaleDateString(undefined,{
+    month: "long",
+    day: "numeric"
+  });
 
-document.getElementById("intelOutput").innerHTML = `
-  <div>Average drop: <b>${avgDropMm.toFixed(1)} mm/day</b></div>
-  <div>Usage: <b>${Math.round(litresPerDay).toLocaleString()} L/day</b></div>
-  <div>Days remaining: <b>${Math.round(daysLeft)}</b></div>
-  <div>Estimated empty: <b>${dateString}</b></div>
-`;
-
+  document.getElementById("intelOutput").innerHTML = `
+    <div>Average drop: <b>${avgDropMm.toFixed(1)} mm/day</b></div>
+    <div>Usage: <b>${Math.round(litresPerDay).toLocaleString()} L/day</b></div>
+    <div>Days remaining: <b>${Math.round(daysLeft)}</b></div>
+    <div>Estimated empty: <b>${dateString}</b></div>
+  `;
 }
 
 // RAIN
@@ -590,31 +768,32 @@ if(overflow > 0){
   message += `\n⚠ Overflow risk: ${Math.round(overflow).toLocaleString()} L`;
 }
 
-// estimate daily usage from history
-let totalDrop = 0;
-let days = 0;
+// estimate extra days using manual daily usage when available,
+// otherwise fall back to the reading history.
+let litresPerDay = getManualDailyUsage();
 
-for(let i = 1; i < history.length; i++){
-  let diff = history[i-1].level - history[i].level;
-  if(diff > 0){
-    totalDrop += diff;
-    days++;
+if(!litresPerDay){
+  let totalDrop = 0;
+  let days = 0;
+
+  for(let i = 1; i < history.length; i++){
+    let diff = history[i-1].level - history[i].level;
+    if(diff > 0){
+      totalDrop += diff;
+      days++;
+    }
+  }
+
+  if(days > 0){
+    const avgDropMm = totalDrop / days;
+    litresPerDay =
+      Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
   }
 }
 
-if(days > 0){
-  const avgDropMm = totalDrop / days;
-  const litresPerDay =
-    Math.PI * radius * radius * (avgDropMm / 10) * numberOfTanks / 1000;
-
-  if(litresPerDay > 0){
-    const daysGained = litresAdded / litresPerDay;
-    message += `\n💧 About ${daysGained.toFixed(1)} extra days of water`;
-  }
-}
-
-else{
-  message += `\n✅ No overflow expected`;
+if(litresPerDay > 0){
+  const daysGained = litresAdded / litresPerDay;
+  message += `\n💧 About ${daysGained.toFixed(1)} extra days of water`;
 }
 
 document.getElementById("rainResult").innerText = message;
